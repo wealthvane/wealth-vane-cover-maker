@@ -21,7 +21,7 @@ download_font()
 # 網頁基本設定
 st.set_page_config(page_title="Wealth Vane 封面生成器", layout="centered")
 st.title("🎨 專業社群封面自動生成器")
-st.write("上傳背景圖並輸入標題，一鍵生成帶有**經典藍色漸層遮罩、精準排版、內建 Logo、且檔案在 1MB 以下**的專業封面。")
+st.write("上傳背景圖並輸入標題，一鍵生成帶有**絲滑藍色漸層遮罩、精準排版、內建 Logo、且檔案在 1MB 以下**的專業封面。")
 
 # --- 側邊欄：視覺參數微調 ---
 st.sidebar.header("⚙️ 視覺參數設定")
@@ -49,27 +49,30 @@ if bg_file:
             bg_img = Image.open(bg_file).convert("RGB")
             bg_img = bg_img.resize((1280, 832), Image.Resampling.LANCZOS)
             
-            # 2. 建立精準漸層遮罩 (配合新設定：下方深、上方淡)
+            # 2. 建立完美的線性漸層遮罩 (100% 依據 Figma Stops 完全無接縫過渡)
             mask = Image.new("L", (1280, 832), 0)
-            figma_opacity = 0.66  # 鎖定 Figma 的 66% 不透明度
+            figma_opacity = 0.66  # 整個圖層不透明度 66%
             
             for y in range(832):
-                # y_factor 從上(0)到下(1)
+                # y_factor 代表當前點在高度的比例 (最上方是 0.0，最下方是 1.0)
                 y_factor = y / 832
                 
-                # 優化漸層分配：讓下方更厚，到中段加速變透明
-                # 這樣文字區域會有完整的深藍色背景，上方原圖則能乾淨透出
-                if y_factor > 0.65:
-                    weight = 1.0
-                elif y_factor < 0.25:
-                    weight = 0.0
-                else:
-                    weight = (y_factor - 0.25) / (0.65 - 0.25)
+                # Figma Stops 邏輯精準轉換：
+                # 由於是「下方深、上方淡」，代表底部 (y_factor=1.0) 對應 Figma 的 35% 位置 (100%不透明)
+                # 頂部 (y_factor=0.0) 對應 Figma 的 100% 位置 (0%不透明)
+                # 計算公式：對應到 Figma 的進度條百分比
+                figma_progress = 100 - (y_factor * (100 - 35))
                 
-                # 計算最終該點的 Alpha 值 (結合 Figma 66% 總體不透明度)
+                # 計算基礎權重 (從 35% 的 1.0 到 100% 的 0.0)
+                weight = (100 - figma_progress) / (100 - 35)
+                
+                # 限制範圍，確保極端狀況不出錯
+                weight = max(0.0, min(1.0, weight))
+                
+                # 計算最終該點的 Alpha 值
                 alpha = int(weight * 255 * figma_opacity)
                 
-                # 橫向整排填入相同的透明度，形成由下往上的純線性漸層
+                # 填入整橫排
                 for x in range(1280):
                     mask.putpixel((x, y), alpha)
             
