@@ -21,11 +21,10 @@ download_font()
 # 網頁基本設定
 st.set_page_config(page_title="Wealth Vane 封面生成器", layout="centered")
 st.title("🎨 專業社群封面自動生成器")
-st.write("上傳背景圖並輸入標題，一鍵生成帶有**絲滑藍色漸層遮罩、精準排版、內建 Logo、且檔案在 1MB 以下**的專業封面。")
+st.write("上傳背景圖並輸入標題，一鍵生成與 **Figma 100% 相同視覺質感**、且檔案在 1MB 以下的專業封面。")
 
 # --- 側邊欄：視覺參數微調 ---
 st.sidebar.header("⚙️ 視覺參數設定")
-gradient_color = st.sidebar.color_picker("漸層主色調", "#1A15A5")
 max_size_mb = st.sidebar.slider("限制檔案大小 (MB)", 0.5, 5.0, 1.0, 0.1)
 
 # --- 主畫面：內容輸入 ---
@@ -35,50 +34,31 @@ subtitle_text = st.text_input("副標題文本", "國巨、華新科上漲空間
 
 bg_file = st.file_uploader("上傳背景圖片", type=["jpg", "jpeg", "png", "webp"])
 
-# 預設的 Logo 路徑
+# 預設的資產路徑
 LOGO_PATH = "logo.png"
+MASK_PATH = "mask.png"
 
 if bg_file:
     if st.button("🚀 一鍵生成完美封面並壓縮"):
         try:
-            if not os.path.exists(LOGO_PATH):
-                st.error("❌ 錯誤：在專案中找不到固定 Logo 檔案。請確認您已將 'logo.png' 上傳至 GitHub 專案中。")
+            if not os.path.exists(LOGO_PATH) or not os.path.exists(MASK_PATH):
+                st.error("❌ 錯誤：在專案中找不到固定 logo.png 或 mask.png。請確認您已將這兩個檔案上傳至 GitHub 專案中。")
                 st.stop()
 
             # 1. 讀取並強制縮放背景圖至 1280 * 832
             bg_img = Image.open(bg_file).convert("RGB")
             bg_img = bg_img.resize((1280, 832), Image.Resampling.LANCZOS)
             
-            # 2. 建立完美的線性漸層遮罩 (100% 依據 Figma Stops 完全無接縫過渡)
-            mask = Image.new("L", (1280, 832), 0)
-            figma_opacity = 0.66  # 整個圖層不透明度 66%
+            # 2. 直接讀取來自 Figma 的真實半透明漸層遮罩，確保光澤與亮度 100% 一致
+            figma_mask = Image.open(MASK_PATH).convert("RGBA")
+            figma_mask = figma_mask.resize((1280, 832), Image.Resampling.LANCZOS)
             
-            for y in range(832):
-                # y_factor 代表當前點在高度的比例 (最上方是 0.0，最下方是 1.0)
-                y_factor = y / 832
-                
-                # Figma Stops 邏輯精準轉換：
-                # 由於是「下方深、上方淡」，代表底部 (y_factor=1.0) 對應 Figma 的 35% 位置 (100%不透明)
-                # 頂部 (y_factor=0.0) 對應 Figma 的 100% 位置 (0%不透明)
-                # 計算公式：對應到 Figma 的進度條百分比
-                figma_progress = 100 - (y_factor * (100 - 35))
-                
-                # 計算基礎權重 (從 35% 的 1.0 到 100% 的 0.0)
-                weight = (100 - figma_progress) / (100 - 35)
-                
-                # 限制範圍，確保極端狀況不出錯
-                weight = max(0.0, min(1.0, weight))
-                
-                # 計算最終該點的 Alpha 值
-                alpha = int(weight * 255 * figma_opacity)
-                
-                # 填入整橫排
-                for x in range(1280):
-                    mask.putpixel((x, y), alpha)
+            # 分離出 Figma 遮罩的色彩圖層與 Alpha 頻道
+            mask_rgb = figma_mask.convert("RGB")
+            mask_alpha = figma_mask.split()[3]  # 提取透明度頻道
             
-            # 建立純色圖層並結合遮罩疊加到背景上
-            gradient_layer = Image.new("RGB", (1280, 832), gradient_color)
-            bg_img = Image.composite(gradient_layer, bg_img, mask)
+            # 將 Figma 遮罩完美疊加至背景圖上
+            bg_img = Image.composite(mask_rgb, bg_img, mask_alpha)
             
             # 3. 繪製文字 (字體大小鎖定 59 px，座標精準依據 Figma：X=130)
             draw = ImageDraw.Draw(bg_img)
@@ -143,4 +123,4 @@ if bg_file:
         except Exception as e:
             st.error(f"❌ 圖片生成失敗，錯誤訊息: {e}")
 else:
-    st.info("💡 網頁已內建品牌 Logo。現在只需在上方面板輸入文字、並上傳背景圖，即可自動產圖！")
+    st.info("💡 網頁已內建品牌 Logo 與 Figma 漸層。現在只需輸入標題並上傳背景圖即可產圖！")
