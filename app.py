@@ -49,13 +49,13 @@ if bg_file:
             bg_img = Image.open(bg_file).convert("RGB")
             bg_img = bg_img.resize((1280, 832), Image.Resampling.LANCZOS)
             
-            # 2. 直接讀取來自 Figma 的真實半透明漸層遮罩，確保光澤與亮度 100% 一致
+            # 2. 直接讀取來自 Figma 的真實半透明漸層遮罩
             figma_mask = Image.open(MASK_PATH).convert("RGBA")
             figma_mask = figma_mask.resize((1280, 832), Image.Resampling.LANCZOS)
             
             # 分離出 Figma 遮罩的色彩圖層與 Alpha 頻道
             mask_rgb = figma_mask.convert("RGB")
-            mask_alpha = figma_mask.split()[3]  # 提取透明度頻道
+            mask_alpha = figma_mask.split()[3]  
             
             # 將 Figma 遮罩完美疊加至背景圖上
             bg_img = Image.composite(mask_rgb, bg_img, mask_alpha)
@@ -75,11 +75,15 @@ if bg_file:
             # 繪製副標題 (Figma 數據：X=130, Y=652)
             draw.text((130, 652), subtitle_text, fill="#FFFFFF", font=font)
             
-            # 4. 讀取並貼上內建 Logo (Figma 數據：X=130, Y=459, 尺寸 286x98)
+            # 4. 讀取並貼上內建 Logo (精準還原 Figma：X=130, Y=459, 尺寸 286x98)
             logo = Image.open(LOGO_PATH).convert("RGBA")
+            
+            # 強制鎖定寬度為 286 px，高度為 98 px，完全對齊 Figma 容器大小
             logo_w = 286
             logo_h = 98
             logo_resized = logo.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+            
+            # 精準蓋印在 X=130, Y=459 處
             bg_img.paste(logo_resized, (130, 459), mask=logo_resized)
             
             # 5. 動態二分搜尋法壓縮，確保檔案在 1MB 以下
