@@ -135,8 +135,7 @@ if bg_file:
                 label="📥 下載高畫質封面圖片",
                 data=img_buffer.getvalue(),
                 file_name=f"cover_{title_text[:10]}.jpg",
-                mime="image/jpeg"
-            )
+                mime="image/jpeg")
             
         except Exception as e:
             st.error(f"❌ 圖片生成失敗，錯誤訊息: {e}")
