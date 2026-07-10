@@ -21,12 +21,12 @@ download_font()
 # 網頁基本設定
 st.set_page_config(page_title="Wealth Vane 封面生成器", layout="centered")
 st.title("🎨 專業社群封面自動生成器")
-st.write("上傳背景圖並輸入標題，一鍵生成帶有**經典藍色漸層遮罩、精準排版與內建 Logo** 的 1280x832 專業封面。")
+st.write("上傳背景圖並輸入標題，一鍵生成帶有**經典藍色漸層遮罩、精準排版、內建 Logo、且檔案在 1MB 以下**的專業封面。")
 
 # --- 側邊欄：視覺參數微調 ---
 st.sidebar.header("⚙️ 視覺參數設定")
 gradient_color = st.sidebar.color_picker("漸層主色調", "#1A15A5")
-font_size = st.sidebar.slider("字體大小 (px)", 40, 80, 59)
+max_size_mb = st.sidebar.slider("限制檔案大小 (MB)", 0.5, 5.0, 1.0, 0.1)
 
 # --- 主畫面：內容輸入 ---
 st.subheader("✍️ 輸入封面內容")
@@ -35,76 +35,110 @@ subtitle_text = st.text_input("副標題文本", "國巨、華新科上漲空間
 
 bg_file = st.file_uploader("上傳背景圖片", type=["jpg", "jpeg", "png", "webp"])
 
-# 預設的 Logo 路徑 (讀取專案內的 logo.png)
+# 預設的 Logo 路徑
 LOGO_PATH = "logo.png"
 
 if bg_file:
-    if st.button("🚀 一鍵生成完美封面"):
+    if st.button("🚀 一鍵生成完美封面並壓縮"):
         try:
-            # 檢查內建 Logo 是否存在
             if not os.path.exists(LOGO_PATH):
-                st.error("❌ 錯誤：在專案中找不到固定 Logo 檔案。請確認您已將 'logo.png' 上傳至 GitHub 專案根目錄中。")
+                st.error("❌ 錯誤：在專案中找不到固定 Logo 檔案。請確認您已將 'logo.png' 上傳至 GitHub 專案中。")
                 st.stop()
 
             # 1. 讀取並強制縮放背景圖至 1280 * 832
             bg_img = Image.open(bg_file).convert("RGB")
             bg_img = bg_img.resize((1280, 832), Image.Resampling.LANCZOS)
             
-            # 2. 建立漸層遮罩 (左下至右上的線性漸層)
+            # 2. 建立精準漸層遮罩 (配合 Figma: 66% 不透明度與發散漸層)
             mask = Image.new("L", (1280, 832), 0)
+            figma_opacity = 0.66  # 鎖定 Figma 截圖中的 66%
+            
             for y in range(832):
                 for x in range(1280):
-                    weight = (832 - y) / 832 * 0.7 + (1280 - x) / 1280 * 0.3
+                    # 計算各點到「左下角 (0, 832)」的距離比例
+                    # 越靠近左下角，值越接近 1；越遠離左下角（往右上角），值越接近 0
+                    dx = x / 1280
+                    dy = (832 - y) / 832
+                    
+                    # 使用非線性平方根計算，模擬 Layer Blur 的圓滑擴散半徑效果
+                    weight = ( (1.0 - dx) * 0.6 + dy * 0.4 )
+                    
+                    # 依據 Figma Stops 的 35% 開始衰減與 66% 總體不透明度設定
                     if weight > 0.65:
-                        alpha = 255
-                    elif weight < 0.20:
+                        alpha = int(255 * figma_opacity)
+                    elif weight < 0.15:
                         alpha = 0
                     else:
-                        alpha = int((weight - 0.20) / (0.65 - 0.20) * 255)
+                        alpha = int(((weight - 0.15) / (0.65 - 0.15)) * 255 * figma_opacity)
+                        
                     mask.putpixel((x, y), alpha)
             
             # 建立純色圖層並結合遮罩疊加到背景上
             gradient_layer = Image.new("RGB", (1280, 832), gradient_color)
             bg_img = Image.composite(gradient_layer, bg_img, mask)
             
-            # 3. 繪製文字 (依據 Figma 數據：X=130)
+            # 3. 繪製文字 (字體大小鎖定 59.22 px，座標精準依據 Figma：X=130)
             draw = ImageDraw.Draw(bg_img)
+            fixed_font_size = 59  # 對應 Figma 59.22 px
+            
             try:
-                font = ImageFont.truetype(FONT_PATH, font_size)
+                font = ImageFont.truetype(FONT_PATH, fixed_font_size)
             except:
                 font = ImageFont.load_default()
                 st.warning("⚠️ 字體載入失敗，使用系統預設字體")
 
-            # 繪製大標題 (Figma 數據：Y=566)
+            # 繪製大標題 (Figma 數據：X=130, Y=566)
             draw.text((130, 566), title_text, fill="#FFFFFF", font=font)
-            # 繪製副標題 (Figma 數據：Y=652)
+            # 繪製副標題 (Figma 數據：X=130, Y=652)
             draw.text((130, 652), subtitle_text, fill="#FFFFFF", font=font)
             
-            # 4. 讀取並貼上內建 Logo (依據 Figma 最新數據：X=130, Y=459, 尺寸 286x98)
+            # 4. 讀取並貼上內建 Logo (Figma 數據：X=130, Y=459, 尺寸 286x98)
             logo = Image.open(LOGO_PATH).convert("RGBA")
             logo_w = 286
             logo_h = 98
             logo_resized = logo.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
-            
-            # 精準蓋印在 X=130, Y=459 處
             bg_img.paste(logo_resized, (130, 459), mask=logo_resized)
             
-            # 5. 輸出成品並提供下載
+            # 5. 動態二分搜尋法壓縮，確保檔案在 1MB 以下
+            max_size_bytes = max_size_mb * 1024 * 1024
+            low, high = 10, 95
+            best_quality = 90
+            
+            img_buffer = io.BytesIO()
+            bg_img.save(img_buffer, "JPEG", quality=high)
+            
+            if img_buffer.tell() > max_size_bytes:
+                while low <= high:
+                    mid = (low + high) // 2
+                    img_buffer = io.BytesIO()
+                    bg_img.save(img_buffer, "JPEG", quality=mid)
+                    file_size = img_buffer.tell()
+                    
+                    if file_size <= max_size_bytes:
+                        best_quality = mid
+                        low = mid + 1
+                    else:
+                        high = mid - 1
+
+                img_buffer = io.BytesIO()
+                bg_img.save(img_buffer, "JPEG", quality=best_quality)
+
+            final_size_mb = img_buffer.tell() / (1024 * 1024)
+            
+            # 6. 呈現成品與下載
             st.write("---")
             st.subheader("✨ 產出成品預覽")
             st.image(bg_img, use_container_width=True)
-            
-            # 轉為記憶體緩衝區提供下載
-            img_buffer = io.BytesIO()
-            bg_img.save(img_buffer, "JPEG", quality=95)
+            st.success(f"✅ 封面生成成功！檔案大小已精準控制在: {final_size_mb:.2f} MB")
             
             st.download_button(
                 label="📥 下載高畫質封面圖片",
                 data=img_buffer.getvalue(),
                 file_name=f"cover_{title_text[:10]}.jpg",
-                mime="image/jpeg" )
+                mime="image/jpeg"
+            )
             
         except Exception as e:
             st.error(f"❌ 圖片生成失敗，錯誤訊息: {e}")
 else:
-    st.info("💡 網頁已內建品牌 Logo。現在只需在中央上傳背景圖、輸入標題，即可開始自動產圖！")
+    st.info("💡 網頁已內建品牌 Logo。現在只需在上方面板輸入文字、並上傳背景圖，即可自動產圖！")
