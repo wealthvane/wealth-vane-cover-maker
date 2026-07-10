@@ -49,37 +49,37 @@ if bg_file:
             bg_img = Image.open(bg_file).convert("RGB")
             bg_img = bg_img.resize((1280, 832), Image.Resampling.LANCZOS)
             
-            # 2. 建立精準漸層遮罩 (配合 Figma: 66% 不透明度與發散漸層)
+            # 2. 建立精準漸層遮罩 (配合新設定：下方深、上方淡)
             mask = Image.new("L", (1280, 832), 0)
-            figma_opacity = 0.66  # 鎖定 Figma 截圖中的 66%
+            figma_opacity = 0.66  # 鎖定 Figma 的 66% 不透明度
             
             for y in range(832):
+                # y_factor 從上(0)到下(1)
+                y_factor = y / 832
+                
+                # 優化漸層分配：讓下方更厚，到中段加速變透明
+                # 這樣文字區域會有完整的深藍色背景，上方原圖則能乾淨透出
+                if y_factor > 0.65:
+                    weight = 1.0
+                elif y_factor < 0.25:
+                    weight = 0.0
+                else:
+                    weight = (y_factor - 0.25) / (0.65 - 0.25)
+                
+                # 計算最終該點的 Alpha 值 (結合 Figma 66% 總體不透明度)
+                alpha = int(weight * 255 * figma_opacity)
+                
+                # 橫向整排填入相同的透明度，形成由下往上的純線性漸層
                 for x in range(1280):
-                    # 計算各點到「左下角 (0, 832)」的距離比例
-                    # 越靠近左下角，值越接近 1；越遠離左下角（往右上角），值越接近 0
-                    dx = x / 1280
-                    dy = (832 - y) / 832
-                    
-                    # 使用非線性平方根計算，模擬 Layer Blur 的圓滑擴散半徑效果
-                    weight = ( (1.0 - dx) * 0.6 + dy * 0.4 )
-                    
-                    # 依據 Figma Stops 的 35% 開始衰減與 66% 總體不透明度設定
-                    if weight > 0.65:
-                        alpha = int(255 * figma_opacity)
-                    elif weight < 0.15:
-                        alpha = 0
-                    else:
-                        alpha = int(((weight - 0.15) / (0.65 - 0.15)) * 255 * figma_opacity)
-                        
                     mask.putpixel((x, y), alpha)
             
             # 建立純色圖層並結合遮罩疊加到背景上
             gradient_layer = Image.new("RGB", (1280, 832), gradient_color)
             bg_img = Image.composite(gradient_layer, bg_img, mask)
             
-            # 3. 繪製文字 (字體大小鎖定 59.22 px，座標精準依據 Figma：X=130)
+            # 3. 繪製文字 (字體大小鎖定 59 px，座標精準依據 Figma：X=130)
             draw = ImageDraw.Draw(bg_img)
-            fixed_font_size = 59  # 對應 Figma 59.22 px
+            fixed_font_size = 59  
             
             try:
                 font = ImageFont.truetype(FONT_PATH, fixed_font_size)
